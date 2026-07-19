@@ -1,0 +1,431 @@
+// DATAFLOW HUB — Prisma schema (from docs/DATABASE_SCHEMA.md)
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ProblemGroup {
+  claim
+  review
+  usage_issue
+  after_sales
+  exchange_return
+  other
+
+  @@map("problem_group")
+}
+
+enum CaseStatus {
+  open
+  received
+  in_repair
+  returned
+  followed_up
+  closed
+
+  @@map("case_status")
+}
+
+enum SyncStatus {
+  running
+  success
+  partial
+  failed
+
+  @@map("sync_status")
+}
+
+enum Brand {
+  fantech
+  ugreen
+  gadget_villa
+  philips
+  other
+
+  @@map("brand_enum")
+}
+
+enum UserRole {
+  admin
+  staff
+  viewer
+
+  @@map("user_role")
+}
+
+// ---------- Auth ----------
+model User {
+  id           BigInt   @id @default(autoincrement())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  displayName  String   @map("display_name")
+  role         UserRole @default(staff)
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+// ---------- Master / Reference ----------
+model Shop {
+  id             BigInt   @id @default(autoincrement())
+  code           String   @unique
+  name           String
+  platform       String?
+  brand          Brand?
+  isSalesChannel Boolean  @default(true) @map("is_sales_channel")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  aliases           ShopAlias[]
+  serviceCases      ServiceCase[]
+  usageIssues       UsageIssue[]
+  chatDailyMetrics  ChatDailyMetric[]
+  chatOffhourCounts ChatOffhourCount[]
+  callCenterSurveys CallCenterSurvey[]
+  creditNotes       CreditNote[]
+
+  @@map("shops")
+}
+
+model ShopAlias {
+  id     BigInt @id @default(autoincrement())
+  alias  String @unique
+  shopId BigInt @map("shop_id")
+  shop   Shop   @relation(fields: [shopId], references: [id])
+
+  @@map("shop_aliases")
+}
+
+model Product {
+  id        BigInt   @id @default(autoincrement())
+  sku       String   @unique
+  name      String?
+  brand     Brand?
+  category  String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  serviceCases ServiceCase[]
+  usageIssues  UsageIssue[]
+
+  @@map("products")
+}
+
+model Customer {
+  id        BigInt   @id @default(autoincrement())
+  fullName  String?  @map("full_name")
+  chatName  String?  @map("chat_name")
+  phone     String?
+  address   String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  serviceCases ServiceCase[]
+
+  @@unique([phone, fullName])
+  @@index([phone])
+  @@map("customers")
+}
+
+// ---------- Service Cases ----------
+model ServiceCase {
+  id                   BigInt       @id @default(autoincrement())
+  caseCode             String?      @unique @map("case_code")
+  caseDate             DateTime?    @map("case_date") @db.Date
+  shopId               BigInt?      @map("shop_id")
+  customerId           BigInt?      @map("customer_id")
+  orderNo              String?      @map("order_no")
+  productId            BigInt?      @map("product_id")
+  productRaw           String?      @map("product_raw")
+  serialNo             String?      @map("serial_no")
+  problemGroup         ProblemGroup @default(other) @map("problem_group")
+  problem              String?
+  solution             String?
+  reviewGroup          String?      @map("review_group")
+  status               CaseStatus   @default(open)
+  defectReceived       Boolean      @default(false) @map("defect_received")
+  defectReceivedDate   DateTime?    @map("defect_received_date") @db.Date
+  sentReplacementFirst Boolean      @default(false) @map("sent_replacement_first")
+  claimDeptReceived    Boolean      @default(false) @map("claim_dept_received")
+  returnedToCustomer   Boolean      @default(false) @map("returned_to_customer")
+  returnedDate         DateTime?    @map("returned_date") @db.Date
+  returnTrackingNo     String?      @map("return_tracking_no")
+  smsNotified          Boolean      @default(false) @map("sms_notified")
+  shippingCost         Decimal?     @map("shipping_cost") @db.Decimal(10, 2)
+  sourceSheet          String       @map("source_sheet")
+  sourceRow            Int?         @map("source_row")
+  dataQualityFlags     String[]     @map("data_quality_flags")
+  createdAt            DateTime     @default(now()) @map("created_at")
+  updatedAt            DateTime     @updatedAt @map("updated_at")
+
+  shop      Shop?          @relation(fields: [shopId], references: [id])
+  customer  Customer?      @relation(fields: [customerId], references: [id])
+  product   Product?       @relation(fields: [productId], references: [id])
+  followups CaseFollowup[]
+  smsLogs   SmsLog[]
+
+  @@index([caseDate])
+  @@index([shopId, caseDate])
+  @@index([problemGroup, caseDate])
+  @@index([returnTrackingNo])
+  @@index([customerId])
+  @@map("service_cases")
+}
+
+model CaseFollowup {
+  id                 BigInt    @id @default(autoincrement())
+  caseId             BigInt    @map("case_id")
+  followupDate       DateTime? @map("followup_date") @db.Date
+  usageResult        String?   @map("usage_result")
+  productQualityNote String?   @map("product_quality_note")
+  serviceNote        String?   @map("service_note")
+  adviceNote         String?   @map("advice_note")
+  satisfaction5      Int?      @map("satisfaction_5") @db.SmallInt
+  satisfaction10     Int?      @map("satisfaction_10") @db.SmallInt
+  productScore10     Int?      @map("product_score_10") @db.SmallInt
+  npsScore           Int?      @map("nps_score") @db.SmallInt
+  feedback           String?
+  createdAt          DateTime  @default(now()) @map("created_at")
+
+  case ServiceCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId])
+  @@map("case_followups")
+}
+
+// ---------- Usage Issues ----------
+model UsageIssue {
+  id              BigInt    @id @default(autoincrement())
+  reportedAt      DateTime? @map("reported_at")
+  shopId          BigInt?   @map("shop_id")
+  customerName    String?   @map("customer_name")
+  orderNo         String?   @map("order_no")
+  productId       BigInt?   @map("product_id")
+  productRaw      String?   @map("product_raw")
+  problem         String?
+  solution        String?
+  resolvedTimeRaw String?   @map("resolved_time_raw")
+  scoreInitial    Int?      @map("score_initial") @db.SmallInt
+  satisfaction5   Int?      @map("satisfaction_5") @db.SmallInt
+  followupResult  String?   @map("followup_result")
+  scoreFollowup   Int?      @map("score_followup") @db.SmallInt
+  followupDate    DateTime? @map("followup_date") @db.Date
+  sourceRow       Int?      @map("source_row")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  shop    Shop?    @relation(fields: [shopId], references: [id])
+  product Product? @relation(fields: [productId], references: [id])
+
+  @@index([reportedAt])
+  @@map("usage_issues")
+}
+
+// ---------- Logs & Operations ----------
+model SmsLog {
+  id         BigInt  @id @default(autoincrement())
+  trackingNo String  @map("tracking_no")
+  msisdn     String?
+  caseId     BigInt? @map("case_id")
+
+  case ServiceCase? @relation(fields: [caseId], references: [id])
+
+  @@unique([trackingNo, msisdn])
+  @@map("sms_logs")
+}
+
+model CreditNote {
+  id         BigInt    @id @default(autoincrement())
+  cnDate     DateTime? @map("cn_date") @db.Date
+  shopId     BigInt?   @map("shop_id")
+  orderNo    String?   @map("order_no")
+  cnNo       String?   @unique @map("cn_no")
+  productRaw String?   @map("product_raw")
+  note       String?
+
+  shop Shop? @relation(fields: [shopId], references: [id])
+
+  @@map("credit_notes")
+}
+
+model ChairClaim {
+  id              BigInt    @id @default(autoincrement())
+  submittedAt     DateTime? @map("submitted_at")
+  model           String?
+  orderNo         String?   @map("order_no")
+  serialNo        String?   @map("serial_no")
+  fantechTracking String?   @map("fantech_tracking")
+  brokenPart      String?   @map("broken_part")
+  symptom         String?
+  photoUrl        String?   @map("photo_url")
+
+  @@unique([submittedAt, orderNo])
+  @@map("chair_claims")
+}
+
+model SparePartRequest {
+  id          BigInt    @id @default(autoincrement())
+  requestDate DateTime? @map("request_date") @db.Date
+  model       String?
+  serialNo    String?   @map("serial_no")
+  gvSerialNo  String?   @map("gv_serial_no")
+  buyDate     DateTime? @map("buy_date") @db.Date
+  sellDate    DateTime? @map("sell_date") @db.Date
+  partName    String?   @map("part_name")
+  photoUrls   String[]  @map("photo_urls")
+
+  @@unique([requestDate, gvSerialNo, partName])
+  @@map("spare_part_requests")
+}
+
+model PresaleFollowup {
+  id               BigInt    @id @default(autoincrement())
+  submittedAt      DateTime? @map("submitted_at")
+  purchased        Boolean?
+  brand            Brand?
+  model            String?
+  noPurchaseReason String?   @map("no_purchase_reason")
+
+  @@unique([submittedAt, model])
+  @@map("presale_followups")
+}
+
+model CallCenterSurvey {
+  id               BigInt    @id @default(autoincrement())
+  surveyDate       DateTime? @map("survey_date") @db.Date
+  customerName     String?   @map("customer_name")
+  phone            String?
+  shopId           BigInt?   @map("shop_id")
+  productBrand     String?   @map("product_brand")
+  q1ProductQuality String?   @map("q1_product_quality")
+  q2AfterSales     String?   @map("q2_after_sales")
+  q3Advice         String?   @map("q3_advice")
+  q4Satisfaction   Int?      @map("q4_satisfaction") @db.SmallInt
+  q5Recommend      Int?      @map("q5_recommend") @db.SmallInt
+  suggestion       String?
+  remark           String?
+  contactResult    String?   @map("contact_result")
+
+  shop Shop? @relation(fields: [shopId], references: [id])
+
+  @@unique([surveyDate, phone])
+  @@map("call_center_surveys")
+}
+
+// ---------- Chat Metrics ----------
+model ChatDailyMetric {
+  id            BigInt   @id @default(autoincrement())
+  metricDate    DateTime @map("metric_date") @db.Date
+  shopId        BigInt?  @map("shop_id")
+  qOrderPayment Int      @default(0) @map("q_order_payment")
+  qProductInfo  Int      @default(0) @map("q_product_info")
+  qOrderStatus  Int      @default(0) @map("q_order_status")
+  qUsageProblem Int      @default(0) @map("q_usage_problem")
+  presaleTotal  Int      @default(0) @map("presale_total")
+  postsaleTotal Int      @default(0) @map("postsale_total")
+
+  shop Shop? @relation(fields: [shopId], references: [id])
+
+  @@unique([metricDate, shopId])
+  @@map("chat_daily_metrics")
+}
+
+model ChatOffhourCount {
+  id         BigInt   @id @default(autoincrement())
+  metricDate DateTime @map("metric_date") @db.Date
+  shopId     BigInt?  @map("shop_id")
+  timeSlot   String   @map("time_slot")
+  chatCount  Int      @default(0) @map("chat_count")
+
+  shop Shop? @relation(fields: [shopId], references: [id])
+
+  @@unique([metricDate, shopId, timeSlot])
+  @@map("chat_offhour_counts")
+}
+
+// ---------- Knowledge Base ----------
+model FaqEntry {
+  id          BigInt  @id @default(autoincrement())
+  brand       Brand?
+  sku         String?
+  question    String
+  answer      String?
+  manualUrl   String? @map("manual_url")
+  sourceSheet String? @map("source_sheet")
+
+  @@unique([brand, sku, question])
+  @@map("faq_entries")
+}
+
+model ReviewGroupLookup {
+  id          BigInt  @id @default(autoincrement())
+  reviewGroup String  @unique @map("review_group")
+  meaning     String?
+
+  @@map("review_group_lookup")
+}
+
+// ---------- Sync & Audit ----------
+model DataSource {
+  id            BigInt    @id @default(autoincrement())
+  spreadsheetId String    @map("spreadsheet_id")
+  sheetName     String    @map("sheet_name")
+  targetTable   String    @map("target_table")
+  processor     String
+  enabled       Boolean   @default(true)
+  syncOrder     Int       @default(100) @map("sync_order")
+  lastSyncedAt  DateTime? @map("last_synced_at")
+
+  syncRuns SyncRun[]
+
+  @@unique([spreadsheetId, sheetName])
+  @@map("data_sources")
+}
+
+model SyncRun {
+  id           BigInt     @id @default(autoincrement())
+  dataSourceId BigInt?    @map("data_source_id")
+  startedAt    DateTime   @map("started_at")
+  finishedAt   DateTime?  @map("finished_at")
+  status       SyncStatus @default(running)
+  rowsRead     Int?       @map("rows_read")
+  rowsUpserted Int?       @map("rows_upserted")
+  rowsRejected Int?       @map("rows_rejected")
+  error        String?
+
+  dataSource DataSource?    @relation(fields: [dataSourceId], references: [id])
+  rowErrors  SyncRowError[]
+
+  @@index([dataSourceId, startedAt])
+  @@map("sync_runs")
+}
+
+model SyncRowError {
+  id        BigInt @id @default(autoincrement())
+  syncRunId BigInt @map("sync_run_id")
+  sourceRow Int?   @map("source_row")
+  rawData   Json?  @map("raw_data")
+  reason    String
+
+  syncRun SyncRun @relation(fields: [syncRunId], references: [id], onDelete: Cascade)
+
+  @@map("sync_row_errors")
+}
+
+model AuditLog {
+  id       BigInt   @id @default(autoincrement())
+  actor    String
+  action   String
+  entity   String?
+  entityId BigInt?  @map("entity_id")
+  diff     Json?
+  at       DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@map("audit_logs")
+}
