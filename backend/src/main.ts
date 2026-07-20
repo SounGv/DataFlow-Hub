@@ -14,7 +14,11 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix('api');
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
-  app.enableCors({ origin: process.env.CORS_ORIGIN?.split(',') ?? true, credentials: true });
+  const corsOrigin = process.env.CORS_ORIGIN;
+  app.enableCors({
+    origin: !corsOrigin || corsOrigin === '*' ? true : corsOrigin.split(','),
+    credentials: true,
+  });
   app.enableShutdownHooks();
   const port = parseInt(process.env.PORT ?? '3000', 10);
   await app.listen(port);

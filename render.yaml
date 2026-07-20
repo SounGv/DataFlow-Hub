@@ -32,7 +32,7 @@ services:
       - key: SYNC_CRON_MINUTES
         value: "15"
       - key: CORS_ORIGIN
-        value: "*"             # หลัง deploy Netlify แล้ว เปลี่ยนเป็น URL ของ Netlify เช่น https://dataflow-hub.netlify.app
+        value: https://aesthetic-lollipop-1bb8ed.netlify.app
 
   - type: keyvalue
     name: dataflow-hub-redis
