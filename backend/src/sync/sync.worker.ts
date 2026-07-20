@@ -33,7 +33,9 @@ export async function startSyncWorker(service: SyncService): Promise<Worker> {
   const minutes = parseInt(process.env.SYNC_CRON_MINUTES ?? '15', 10);
   const queue = new Queue(SYNC_QUEUE, { connection: { url } as never });
   await queue.add('enqueue-all', {}, { repeat: { pattern: `*/${minutes} * * * *` }, jobId: 'cron-enqueue-all' });
-  console.log(`[sync] worker started — full sync every ${minutes} min`);
+  // free tier หลับเมื่อไม่มีคนใช้ → sync ทันทีทุกครั้งที่ตื่น (boot)
+  await queue.add('enqueue-all', {}, { jobId: `boot-${Date.now()}`, removeOnComplete: true, removeOnFail: true });
+  console.log(`[sync] worker started — sync on boot + every ${minutes} min`);
   return worker;
 }
 
