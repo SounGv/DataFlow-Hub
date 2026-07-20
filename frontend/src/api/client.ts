@@ -1,7 +1,10 @@
 const TOKEN_KEY = 'dfh_token';
 
-/** Base URL ของ Backend — ว่าง = ใช้ผ่าน dev proxy/same-origin, ตั้งผ่าน VITE_API_BASE เมื่อ deploy แยกโดเมน (เช่น Render) */
-export const API_BASE: string = (import.meta.env?.VITE_API_BASE as string | undefined)?.replace(/\/$/, '') ?? '';
+/** Base URL ของ Backend — dev ใช้ proxy (ว่าง), production ชี้ Render โดยตรง (override ได้ด้วย VITE_API_BASE) */
+const PROD_API = 'https://dataflow-hub-api.onrender.com';
+const isLocal = typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+export const API_BASE: string =
+  (import.meta.env?.VITE_API_BASE as string | undefined)?.replace(/\/$/, '') ?? (isLocal ? '' : PROD_API);
 
 export const auth = {
   get token() {
