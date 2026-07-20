@@ -32,7 +32,6 @@ export default function CustomerVoice() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Customer Voice</h1>
       <div className="grid grid-cols-3 gap-3">
         <KpiCard label="ความพึงพอใจเฉลี่ย (0-10)" loading={stats.isLoading}
           value={stats.data?.avgSatisfaction10 ? Number(stats.data.avgSatisfaction10).toFixed(1) : '—'} />

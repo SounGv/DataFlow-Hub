@@ -15,6 +15,7 @@ import KnowledgeBase from './pages/KnowledgeBase';
 import Login from './pages/Login';
 import Overview from './pages/Overview';
 import PrintCenter from './pages/PrintCenter';
+import ReportCenter from './pages/ReportCenter';
 import ProductService from './pages/ProductService';
 import SalesPerformance from './pages/SalesPerformance';
 import Settings from './pages/Settings';
@@ -35,6 +36,7 @@ const router = createBrowserRouter([
       { index: true, element: <Navigate to="/overview" replace /> },
       { path: 'overview', element: <Overview /> },
       { path: 'analytics', element: <Analytics /> },
+      { path: 'reports', element: <ReportCenter /> },
       { path: 'customer-chat', element: <CustomerChat /> },
       { path: 'sales', element: <SalesPerformance /> },
       { path: 'after-sales', element: <AfterSales /> },

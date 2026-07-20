@@ -21,6 +21,142 @@ export class AnalyticsService {
     };
   }
 
+  // ---------- PHASE 2: KPI with previous-period compare + sparkline ----------
+
+  private static rangeDays(r: DateRange): number | null {
+    if (!r.dateFrom || !r.dateTo) return null;
+    return Math.round((new Date(r.dateTo).getTime() - new Date(r.dateFrom).getTime()) / 86400000) + 1;
+  }
+
+  private static prevOf(r: DateRange): DateRange {
+    const days = AnalyticsService.rangeDays(r);
+    if (!days) return {};
+    const from = new Date(r.dateFrom!);
+    const prevTo = new Date(from.getTime() - 86400000);
+    const prevFrom = new Date(prevTo.getTime() - (days - 1) * 86400000);
+    return { dateFrom: prevFrom.toISOString().slice(0, 10), dateTo: prevTo.toISOString().slice(0, 10) };
+  }
+
+  /** นับค่าเดียวต่อ metric ในช่วงวันที่ (NULL range = ทั้งหมด) */
+  private async metricValue(metric: string, r: DateRange): Promise<number> {
+    const f = r.dateFrom ?? null;
+    const t = r.dateTo ?? null;
+    let rows: { v: unknown }[];
+    switch (metric) {
+      case 'contacts':
+        rows = await this.prisma.$queryRaw`
+          SELECT COALESCE(SUM(presale_total + postsale_total),0) AS v FROM chat_daily_metrics
+          WHERE (${f}::date IS NULL OR metric_date >= ${f}::date) AND (${t}::date IS NULL OR metric_date <= ${t}::date)`;
+        break;
+      case 'shipments':
+        rows = await this.prisma.$queryRaw`
+          SELECT COUNT(*) AS v FROM service_cases WHERE returned_to_customer = true
+          AND (${f}::date IS NULL OR returned_date >= ${f}::date) AND (${t}::date IS NULL OR returned_date <= ${t}::date)`;
+        break;
+      case 'after_sales':
+        rows = await this.prisma.$queryRaw`
+          SELECT COUNT(*) AS v FROM service_cases
+          WHERE (${f}::date IS NULL OR case_date >= ${f}::date) AND (${t}::date IS NULL OR case_date <= ${t}::date)`;
+        break;
+      case 'pending':
+        rows = await this.prisma.$queryRaw`
+          SELECT COUNT(*) AS v FROM service_cases WHERE status IN ('open','received','in_repair')
+          AND (${f}::date IS NULL OR case_date >= ${f}::date) AND (${t}::date IS NULL OR case_date <= ${t}::date)`;
+        break;
+      case 'feedback':
+        rows = await this.prisma.$queryRaw`
+          SELECT COUNT(*) AS v FROM case_followups
+          WHERE (${f}::date IS NULL OR followup_date >= ${f}::date) AND (${t}::date IS NULL OR followup_date <= ${t}::date)`;
+        break;
+      default:
+        return 0;
+    }
+    return Number(rows[0]?.v ?? 0);
+  }
+
+  /** sparkline รายวัน (สูงสุด 30 จุดท้ายของช่วง; ไม่มีช่วง = 30 วันล่าสุด) */
+  private async sparkline(metric: string, r: DateRange): Promise<number[]> {
+    const end = r.dateTo ?? new Date().toISOString().slice(0, 10);
+    const endD = new Date(end);
+    const startD = new Date(endD.getTime() - 29 * 86400000);
+    const start = r.dateFrom && new Date(r.dateFrom) > startD ? r.dateFrom : startD.toISOString().slice(0, 10);
+    const dateCol =
+      metric === 'contacts' ? 'metric_date' : metric === 'shipments' ? 'returned_date' : metric === 'feedback' ? 'followup_date' : 'case_date';
+    const table = metric === 'contacts' ? 'chat_daily_metrics' : metric === 'feedback' ? 'case_followups' : 'service_cases';
+    const valueExpr = metric === 'contacts' ? 'SUM(presale_total + postsale_total)' : 'COUNT(*)';
+    const extra = metric === 'shipments' ? 'AND returned_to_customer = true' : metric === 'pending' ? "AND status IN ('open','received','in_repair')" : '';
+    const rows = await this.prisma.$queryRawUnsafe<{ d: Date; v: unknown }[]>(
+      `SELECT ${dateCol} AS d, ${valueExpr} AS v FROM ${table}
+       WHERE ${dateCol} >= $1::date AND ${dateCol} <= $2::date ${extra}
+       GROUP BY ${dateCol} ORDER BY ${dateCol}`,
+      start, end,
+    );
+    // เติมวันว่างเป็น 0 เพื่อให้ sparkline ต่อเนื่อง
+    const byDay = new Map(rows.map((x) => [new Date(x.d).toISOString().slice(0, 10), Number(x.v)]));
+    const out: number[] = [];
+    for (let d = new Date(start); d <= endD; d = new Date(d.getTime() + 86400000)) {
+      out.push(byDay.get(d.toISOString().slice(0, 10)) ?? 0);
+    }
+    return out;
+  }
+
+  /**
+   * KPI cards — current / previous / %change / sparkline ต่อ metric
+   * metric ที่ไม่มีแหล่งข้อมูล (closed sales, sales value) ส่ง available:false — ห้ามใส่เลขปลอม
+   */
+  async kpis(r: DateRange) {
+    const prev = AnalyticsService.prevOf(r);
+    const hasPrev = !!prev.dateFrom;
+    const metrics = ['contacts', 'shipments', 'after_sales', 'pending', 'feedback'] as const;
+    const result: Record<string, unknown> = {};
+    for (const m of metrics) {
+      const [current, previous, spark] = await Promise.all([
+        this.metricValue(m, r),
+        hasPrev ? this.metricValue(m, prev) : Promise.resolve(null),
+        this.sparkline(m, r),
+      ]);
+      const changePct =
+        previous !== null && previous > 0 ? Math.round(((current - previous) / previous) * 1000) / 10 : null;
+      result[m] = { available: true, current, previous, changePct, spark };
+    }
+    // ยังไม่มีแหล่งข้อมูล — ดู PROJECT_ANALYSIS.md (P1)
+    for (const m of ['closed_sales', 'sales_value', 'conversion_rate']) {
+      result[m] = { available: false, reason: 'ยังไม่มีชีตข้อมูลยอดขาย/แอดมิน' };
+    }
+    return { range: r, prevRange: hasPrev ? prev : null, metrics: result };
+  }
+
+  /** Business Performance Trend — bucket day/week/month/year + เทียบช่วงก่อนหน้า */
+  async businessTrend(metric: string, bucket: string, r: DateRange, compare: boolean) {
+    const safeBucket = ['day', 'week', 'month', 'year'].includes(bucket) ? bucket : 'day';
+    const series = await this.trendSeries(metric, safeBucket, r);
+    let prevSeries: { t: string; value: number }[] | null = null;
+    if (compare) {
+      const prev = AnalyticsService.prevOf(r);
+      if (prev.dateFrom) prevSeries = await this.trendSeries(metric, safeBucket, prev);
+    }
+    return { metric, bucket: safeBucket, series, prevSeries };
+  }
+
+  private async trendSeries(metric: string, bucket: string, r: DateRange) {
+    const f = r.dateFrom ?? null;
+    const t = r.dateTo ?? null;
+    const dateCol =
+      metric === 'contacts' ? 'metric_date' : metric === 'shipments' ? 'returned_date' : 'case_date';
+    const table = metric === 'contacts' ? 'chat_daily_metrics' : 'service_cases';
+    const valueExpr = metric === 'contacts' ? 'SUM(presale_total + postsale_total)' : 'COUNT(*)';
+    const extra = metric === 'shipments' ? 'AND returned_to_customer = true' : '';
+    const rows = await this.prisma.$queryRawUnsafe<{ b: Date; v: unknown }[]>(
+      `SELECT date_trunc('${bucket}', ${dateCol}) AS b, ${valueExpr} AS v FROM ${table}
+       WHERE ${dateCol} IS NOT NULL
+         AND ($1::date IS NULL OR ${dateCol} >= $1::date)
+         AND ($2::date IS NULL OR ${dateCol} <= $2::date)
+       GROUP BY 1 ORDER BY 1`,
+      f, t,
+    );
+    return rows.map((x) => ({ t: new Date(x.b).toISOString().slice(0, 10), value: Number(x.v) }));
+  }
+
   /** Overview KPIs (Phase 3 Overview page) */
   async overview(r: DateRange) {
     const where = this.caseDateWhere(r);

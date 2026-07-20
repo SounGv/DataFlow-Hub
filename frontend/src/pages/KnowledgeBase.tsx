@@ -14,7 +14,6 @@ export default function KnowledgeBase() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Knowledge Base</h1>
       <div className="flex flex-wrap gap-2">
         <input className="input w-64" placeholder="ค้นหาคำถาม / SKU" value={q} onChange={(e) => setQ(e.target.value)} />
         <select className="input" value={brand} onChange={(e) => setBrand(e.target.value)}>

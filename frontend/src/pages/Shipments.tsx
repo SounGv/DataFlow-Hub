@@ -31,7 +31,6 @@ export default function Shipments() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Shipments</h1>
       <input
         className="input w-full max-w-md"
         placeholder="ค้นหา ลูกค้า / เบอร์ / Order / Tracking"

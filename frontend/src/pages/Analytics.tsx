@@ -1,17 +1,16 @@
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
 import {
   Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { api, qs } from '../api/client';
 import { Overview, ShopCases, TopProduct } from '../api/types';
-import { DateRangeFilter, Range } from '../components/DateRange';
 import { Async, STATUS_LABELS } from '../components/ui';
+import { useGlobalFilter } from '../context/GlobalFilter';
 
 const PIE_COLORS = ['#f87171', '#fbbf24', '#38bdf8', '#a78bfa', '#fb923c', '#94a3b8'];
 
 export default function Analytics() {
-  const [range, setRange] = useState<Range>({});
+  const { range } = useGlobalFilter();
   const overview = useQuery({
     queryKey: ['overview', range],
     queryFn: () => api<Overview>(`/analytics/overview${qs(range)}`),
@@ -27,11 +26,6 @@ export default function Analytics() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">Analytics</h1>
-        <DateRangeFilter value={range} onChange={setRange} />
-      </div>
-
       <div className="grid gap-4 xl:grid-cols-2">
         <div className="card">
           <h2 className="mb-3 text-sm font-semibold text-slate-300">สัดส่วนกลุ่มปัญหา</h2>

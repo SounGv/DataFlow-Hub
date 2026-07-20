@@ -12,7 +12,6 @@ export default function DataSources() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Data Sources</h1>
       <p className="text-sm text-slate-500">
         Google Sheets เป็น Source of Truth — ระบบ sync ทางเดียวเข้า PostgreSQL ตาม mapping ใน docs/DATA_MAPPING.md
       </p>

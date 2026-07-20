@@ -5,8 +5,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { api, qs } from '../api/client';
 import { Paged, ServiceCase } from '../api/types';
 import { Column, DataTable } from '../components/DataTable';
-import { DateRangeFilter, Range } from '../components/DateRange';
 import { Badge, fmtDate, KpiCard, Skeleton } from '../components/ui';
+import { useGlobalFilter } from '../context/GlobalFilter';
 
 function CaseDetail({ id, onClose }: { id: string; onClose: () => void }) {
   const { data: c, isLoading } = useQuery({
@@ -108,23 +108,27 @@ function CaseDetail({ id, onClose }: { id: string; onClose: () => void }) {
 export default function AfterSales() {
   const [params, setParams] = useSearchParams();
   const [page, setPage] = useState(1);
-  const [range, setRange] = useState<Range>({});
+  const { range } = useGlobalFilter();
   const [q, setQ] = useState(params.get('q') ?? '');
-  const [group, setGroup] = useState('');
+  const [group, setGroup] = useState(params.get('problemGroup') ?? '');
   const [status, setStatus] = useState('');
   const selectedCase = params.get('case');
+  // drill-down จากกราฟ: วันที่ใน URL มีลำดับความสำคัญเหนือ global filter
+  const urlFrom = params.get('dateFrom') ?? undefined;
+  const urlTo = params.get('dateTo') ?? undefined;
+  const effRange = urlFrom || urlTo ? { dateFrom: urlFrom, dateTo: urlTo } : range;
 
-  useEffect(() => setPage(1), [q, group, status, range]);
+  useEffect(() => setPage(1), [q, group, status, effRange.dateFrom, effRange.dateTo]);
 
   const query = useQuery({
-    queryKey: ['cases', page, q, group, status, range],
+    queryKey: ['cases', page, q, group, status, effRange],
     queryFn: () =>
-      api<Paged<ServiceCase>>(`/cases${qs({ page, pageSize: 25, q, problemGroup: group, status, ...range })}`),
+      api<Paged<ServiceCase>>(`/cases${qs({ page, pageSize: 25, q, problemGroup: group, status, ...effRange })}`),
   });
 
   const stats = useQuery({
-    queryKey: ['overview', range],
-    queryFn: () => api<{ totalCases: number; pendingCases: number; byProblemGroup: Record<string, number> }>(`/analytics/overview${qs(range)}`),
+    queryKey: ['overview', effRange],
+    queryFn: () => api<{ totalCases: number; pendingCases: number; byProblemGroup: Record<string, number> }>(`/analytics/overview${qs(effRange)}`),
   });
 
   const columns: Column<ServiceCase>[] = [
@@ -139,11 +143,6 @@ export default function AfterSales() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">After-sales</h1>
-        <DateRangeFilter value={range} onChange={setRange} />
-      </div>
-
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <KpiCard label="Total Cases" loading={stats.isLoading} value={stats.data?.totalCases?.toLocaleString() ?? '—'} />
         <KpiCard label="Pending" loading={stats.isLoading} value={stats.data?.pendingCases?.toLocaleString() ?? '—'} />

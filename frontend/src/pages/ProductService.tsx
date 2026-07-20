@@ -3,12 +3,12 @@ import { useState } from 'react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { api, qs } from '../api/client';
 import { ChairClaim, Paged, TopProduct, UsageIssue } from '../api/types';
-import { DateRangeFilter, Range } from '../components/DateRange';
 import { Async, fmtDate, fmtDateTime } from '../components/ui';
+import { useGlobalFilter } from '../context/GlobalFilter';
 
 /** Product Service — Top products ที่มีเคส, แจ้งปัญหาการใช้งาน, เคลมเก้าอี้ */
 export default function ProductService() {
-  const [range, setRange] = useState<Range>({});
+  const { range } = useGlobalFilter();
   const [page, setPage] = useState(1);
 
   const topProducts = useQuery({
@@ -26,11 +26,6 @@ export default function ProductService() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">Product Service</h1>
-        <DateRangeFilter value={range} onChange={setRange} />
-      </div>
-
       <div className="card">
         <h2 className="mb-3 text-sm font-semibold text-slate-300">สินค้าที่มีเคสมากสุด</h2>
         <Async {...topProducts} refetch={topProducts.refetch} isEmpty={(d) => d.length === 0}>

@@ -11,7 +11,6 @@ export default function SpareParts() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Spare Parts (ขออะไหล่เก้าอี้)</h1>
       <Async {...parts} refetch={parts.refetch} isEmpty={(d) => d.length === 0}>
         {(d) => (
           <div className="overflow-x-auto rounded-xl border border-line">

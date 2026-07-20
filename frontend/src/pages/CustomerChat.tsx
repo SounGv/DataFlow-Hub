@@ -47,8 +47,7 @@ export default function CustomerChat() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">Customer & Chat</h1>
+      <div className="flex flex-wrap items-center justify-end gap-3">
         <select className="input" value={shopFilter} onChange={(e) => setShopFilter(e.target.value)}>
           <option value="">ทุก Channel</option>
           {shops.map((s) => (

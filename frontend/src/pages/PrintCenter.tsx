@@ -29,8 +29,6 @@ export default function PrintCenter() {
   return (
     <div className="grid gap-4 xl:grid-cols-2">
       <div className="space-y-4">
-        <h1 className="text-xl font-semibold">Print Center</h1>
-
         <div className="card space-y-3">
           <p className="text-sm font-medium">1) ค้นหาลูกค้า</p>
           <div className="relative">

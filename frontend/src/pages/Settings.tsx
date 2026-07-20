@@ -10,7 +10,6 @@ export default function Settings() {
 
   return (
     <div className="max-w-lg space-y-4">
-      <h1 className="text-xl font-semibold">Settings</h1>
       <Async {...me} refetch={me.refetch}>
         {(u) => (
           <div className="card space-y-2 text-sm">

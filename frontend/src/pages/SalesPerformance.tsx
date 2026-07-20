@@ -24,8 +24,6 @@ export default function SalesPerformance() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Sales Performance</h1>
-
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
         <KpiCard label="ลูกค้าสนใจ (Pre-sales chat)" loading={chat.isLoading} value={totals?.presale.toLocaleString() ?? '—'} />
         <KpiCard label="ลูกค้าซื้อแล้ว (Post-sales chat)" loading={chat.isLoading} value={totals?.postsale.toLocaleString() ?? '—'} />

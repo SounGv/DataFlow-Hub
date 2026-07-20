@@ -11,7 +11,6 @@ export default function AuditLogs() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Audit Logs</h1>
       <Async {...logs} refetch={logs.refetch} isEmpty={(d) => d.length === 0}>
         {(d) => (
           <div className="overflow-x-auto rounded-xl border border-line">
