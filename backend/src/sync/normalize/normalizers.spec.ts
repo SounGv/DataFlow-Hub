@@ -12,8 +12,8 @@ describe('parseCsv (link-share mode)', () => {
   it('handles escaped double quotes', () => {
     expect(parseCsv('"เขาบอกว่า ""เสีย""",x')[0][0]).toBe('เขาบอกว่า "เสีย"');
   });
-  it('skips fully empty rows', () => {
-    expect(parseCsv('"a","b"\n"",""\n"c","d"')).toHaveLength(2);
+  it('keeps empty rows (needed for pagination counting)', () => {
+    expect(parseCsv('"a","b"\n"",""\n"c","d"')).toHaveLength(3);
   });
 });
 

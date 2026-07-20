@@ -69,7 +69,16 @@ export const serviceCasesProcessor: SheetProcessor = async (rows, ctx): Promise<
     if (!row || row.every((c) => c === null || c === undefined || c === '')) continue;
     result.read++;
 
-    const code = caseCode(cell(row, col.caseCode));
+    let code = caseCode(cell(row, col.caseCode));
+    if (!code.value) {
+      // ชีต ส่งก่อน/รีวิว/Data ช่วงหลังใช้เลขลำดับแทนรหัส GV → สร้างรหัสสังเคราะห์ที่คงที่
+      const SYNTH: Record<string, string> = { 'ส่งก่อน': 'SK', 'รีวิว': 'RV', Data: 'DT' };
+      const rawId = cleanText(cell(row, col.caseCode));
+      const prefix = SYNTH[sourceSheet];
+      if (prefix && rawId && /^\d+$/.test(rawId)) {
+        code = { value: `${prefix}${rawId}`, flags: ['synthetic_case_code'] };
+      }
+    }
     if (!code.value) {
       result.rejected++;
       result.errors.push({ sourceRow: r + 1, rawData: row.slice(0, 12), reason: code.flags.join(',') || 'invalid_case_code' });

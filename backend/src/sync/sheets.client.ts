@@ -9,24 +9,35 @@
  * normalizers.thDate/parseBool/score handle string forms.
  */
 export class SheetsClient {
-  /** Returns all rows of a sheet as a 2D array (string | null cells). */
+  /**
+   * Returns all rows of a sheet as a 2D array (string | null cells).
+   * อ่านแบบแบ่งหน้า (limit/offset) — gviz ตัด response ใหญ่ (~13k แถวของชีตหลัก)
+   */
   async readSheet(spreadsheetId: string, sheetName: string): Promise<unknown[][]> {
-    const url =
-      `https://docs.google.com/spreadsheets/d/${encodeURIComponent(spreadsheetId)}` +
-      `/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}&headers=0`;
-    const res = await fetch(url, { redirect: 'follow' });
-    if (!res.ok) {
-      throw new Error(
-        `อ่านชีต "${sheetName}" ไม่ได้ (HTTP ${res.status}) — ตรวจว่าแชร์สเปรดชีตเป็น "ทุกคนที่มีลิงก์ (Viewer)" และ SPREADSHEET_ID ถูกต้อง`,
-      );
+    const pageSize = 3000;
+    const all: unknown[][] = [];
+    for (let offset = 0; ; offset += pageSize) {
+      const tq = encodeURIComponent(`select * limit ${pageSize} offset ${offset}`);
+      const url =
+        `https://docs.google.com/spreadsheets/d/${encodeURIComponent(spreadsheetId)}` +
+        `/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}&headers=0&tq=${tq}`;
+      const res = await fetch(url, { redirect: 'follow' });
+      if (!res.ok) {
+        throw new Error(
+          `อ่านชีต "${sheetName}" ไม่ได้ (HTTP ${res.status}) — ตรวจว่าแชร์สเปรดชีตเป็น "ทุกคนที่มีลิงก์ (Viewer)" และ SPREADSHEET_ID ถูกต้อง`,
+        );
+      }
+      const text = await res.text();
+      if (text.trimStart().startsWith('<')) {
+        throw new Error(
+          `ชีต "${sheetName}" ยังไม่เปิดแชร์แบบลิงก์ — เปิด Google Sheets → Share → General access → "Anyone with the link" (Viewer)`,
+        );
+      }
+      const page = parseCsv(text);
+      all.push(...page);
+      if (page.length < pageSize) break;
     }
-    const text = await res.text();
-    if (text.trimStart().startsWith('<')) {
-      throw new Error(
-        `ชีต "${sheetName}" ยังไม่เปิดแชร์แบบลิงก์ — เปิด Google Sheets → Share → General access → "Anyone with the link" (Viewer)`,
-      );
-    }
-    return parseCsv(text);
+    return all;
   }
 
   /** Map header row → column index, matched by normalized header text. */
@@ -68,8 +79,8 @@ export function parseCsv(text: string): (string | null)[][] {
   };
   const pushRow = () => {
     pushCell();
-    // skip fully empty rows
-    if (row.some((c) => c !== null && c !== '')) rows.push(row);
+    // เก็บแถวว่างไว้ด้วย — จำเป็นต่อการนับหน้า (pagination); processors ข้ามแถวว่างเองอยู่แล้ว
+    rows.push(row);
     row = [];
   };
 
