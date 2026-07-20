@@ -27,6 +27,8 @@ services:
         value: 1xIR_3Bdi5IYIRAhwpI4jMKmcPmDyJUPHMWwkLpr3ueo
       - key: START_WORKER
         value: "true"          # free tier ไม่มี background worker แยก → รัน worker ใน process เดียวกับ API
+      - key: AUTH_DISABLED
+        value: "true"          # เปิดใช้โดยไม่ต้อง login — เปลี่ยนเป็น "false" เพื่อเปิดระบบ login กลับ
       - key: SYNC_CRON_MINUTES
         value: "15"
       - key: CORS_ORIGIN

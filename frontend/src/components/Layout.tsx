@@ -55,8 +55,7 @@ export function useLiveSync() {
   const [live, setLive] = useState(false);
   const [lastEvent, setLastEvent] = useState<SyncEvent | null>(null);
   useEffect(() => {
-    if (!auth.token) return;
-    const es = new EventSource(`${API_BASE}/api/sync/stream?token=${auth.token}`);
+    const es = new EventSource(`${API_BASE}/api/sync/stream?token=${auth.token ?? ''}`);
     es.onopen = () => setLive(true);
     es.onerror = () => setLive(false);
     es.onmessage = (e) => {
@@ -172,10 +171,8 @@ export default function Layout() {
   const nav = useNavigate();
   const { live, lastEvent } = useLiveSync();
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  useEffect(() => {
-    if (!auth.token) nav('/login');
-  }, [nav]);
+  // ระบบเปิดใช้แบบไม่ต้อง login (AUTH_DISABLED) — ถ้า backend เปิด auth กลับ
+  // api client จะ redirect ไป /login เองเมื่อเจอ 401
 
   const { data: syncStatus } = useQuery({
     queryKey: ['sync-status-header', lastEvent?.at],
@@ -214,19 +211,21 @@ export default function Layout() {
           ))}
         </div>
       ))}
-      <button
-        className="mt-auto flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-400 hover:bg-line/40"
-        onClick={async () => {
-          try {
-            await api('/auth/logout', { method: 'POST' });
-          } finally {
-            auth.clear();
-            nav('/login');
-          }
-        }}
-      >
-        <LogOut className="h-4 w-4" /> ออกจากระบบ
-      </button>
+      {auth.token && (
+        <button
+          className="mt-auto flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-400 hover:bg-line/40"
+          onClick={async () => {
+            try {
+              await api('/auth/logout', { method: 'POST' });
+            } finally {
+              auth.clear();
+              nav('/login');
+            }
+          }}
+        >
+          <LogOut className="h-4 w-4" /> ออกจากระบบ
+        </button>
+      )}
     </nav>
   );
 

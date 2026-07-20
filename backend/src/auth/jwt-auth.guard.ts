@@ -11,6 +11,8 @@ export class JwtAuthGuard implements CanActivate {
   ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
+    // AUTH_DISABLED=true → เปิดใช้งานได้โดยไม่ต้อง login (ตั้งใน Render env)
+    if (process.env.AUTH_DISABLED === 'true') return true;
     const req = ctx.switchToHttp().getRequest<Request & { user?: JwtPayload; tokenExp?: number }>();
     const header = req.headers.authorization ?? '';
     const token = header.startsWith('Bearer ') ? header.slice(7) : (req.query.token as string | undefined);
