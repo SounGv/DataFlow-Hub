@@ -46,6 +46,16 @@ export class AnalyticsController {
     return this.analytics.trends(q);
   }
 
+  @Get('ranking')
+  ranking(@Query() q: RangeQuery & { dimension?: string; sort?: string }) {
+    return this.analytics.ranking(q.dimension ?? 'product', q.sort ?? 'cases', q);
+  }
+
+  @Get('chat-breakdown')
+  chatBreakdown(@Query() q: RangeQuery) {
+    return this.analytics.chatBreakdown(q);
+  }
+
   @Get('top-products')
   topProducts(@Query() q: RangeQuery) {
     return this.analytics.topProducts(q);

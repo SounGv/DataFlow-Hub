@@ -206,6 +206,115 @@ export class AnalyticsService {
     return rows.map((x) => ({ month: x.month, problemGroup: x.problem_group, count: Number(x.count) }));
   }
 
+  // ---------- PHASE 3: deep analytics ----------
+
+  /**
+   * Ranking แบบ parameterized + sortable (spec ADMIN PERFORMANCE / rankings)
+   * dimension: product | shop | review_group  ·  sort: cases | resolved | satisfaction
+   */
+  async ranking(dimension: string, sort: string, r: DateRange, limit = 15) {
+    const f = r.dateFrom ?? null;
+    const t = r.dateTo ?? null;
+    const dim =
+      dimension === 'shop' ? 'sc.shop_id' : dimension === 'review_group' ? 'sc.review_group' : 'sc.product_id';
+    const orderCol =
+      sort === 'resolved' ? 'resolved' : sort === 'satisfaction' ? 'avg_satisfaction' : 'cases';
+    const rows = await this.prisma.$queryRawUnsafe<
+      { key: unknown; cases: bigint; resolved: bigint; avg_satisfaction: number | null }[]
+    >(
+      `SELECT ${dim} AS key,
+              COUNT(*)::bigint AS cases,
+              COUNT(*) FILTER (WHERE sc.status IN ('returned','followed_up','closed'))::bigint AS resolved,
+              ROUND(AVG(cf.satisfaction10)::numeric, 1) AS avg_satisfaction
+       FROM service_cases sc
+       LEFT JOIN case_followups cf ON cf.case_id = sc.id
+       WHERE ${dim} IS NOT NULL
+         AND ($1::date IS NULL OR sc.case_date >= $1::date)
+         AND ($2::date IS NULL OR sc.case_date <= $2::date)
+       GROUP BY ${dim}
+       ORDER BY ${orderCol} DESC NULLS LAST
+       LIMIT ${limit}`,
+      f, t,
+    );
+
+    // resolve labels
+    let labels = new Map<string, string>();
+    if (dimension === 'shop') {
+      const shops = await this.prisma.shop.findMany();
+      labels = new Map(shops.map((s) => [s.id.toString(), s.name]));
+    } else if (dimension === 'product') {
+      const ids = rows.map((x) => x.key).filter((x): x is bigint => x !== null) as bigint[];
+      const products = await this.prisma.product.findMany({ where: { id: { in: ids } } });
+      labels = new Map(products.map((p) => [p.id.toString(), p.sku]));
+    }
+    return rows.map((x) => {
+      const cases = Number(x.cases);
+      const resolved = Number(x.resolved);
+      const keyStr = x.key === null || x.key === undefined ? '' : String(x.key);
+      return {
+        key: keyStr,
+        label: dimension === 'review_group' ? keyStr : labels.get(keyStr) ?? keyStr,
+        cases,
+        resolved,
+        resolvedRate: cases > 0 ? Math.round((resolved / cases) * 1000) / 10 : 0,
+        avgSatisfaction: x.avg_satisfaction !== null ? Number(x.avg_satisfaction) : null,
+      };
+    });
+  }
+
+  /**
+   * Chat breakdown (spec CUSTOMER & CHAT ANALYTICS)
+   * แยกประเภทคำถาม + ก่อน/หลังขาย + returning proxy (ลูกค้าที่มีเคสซ้ำ)
+   */
+  async chatBreakdown(r: DateRange) {
+    const f = r.dateFrom ?? null;
+    const t = r.dateTo ?? null;
+    const totals = await this.prisma.$queryRaw<
+      { order_payment: bigint; product_info: bigint; order_status: bigint; usage_problem: bigint; presale: bigint; postsale: bigint }[]
+    >`
+      SELECT COALESCE(SUM(q_order_payment),0)::bigint AS order_payment,
+             COALESCE(SUM(q_product_info),0)::bigint AS product_info,
+             COALESCE(SUM(q_order_status),0)::bigint AS order_status,
+             COALESCE(SUM(q_usage_problem),0)::bigint AS usage_problem,
+             COALESCE(SUM(presale_total),0)::bigint AS presale,
+             COALESCE(SUM(postsale_total),0)::bigint AS postsale
+      FROM chat_daily_metrics
+      WHERE (${f}::date IS NULL OR metric_date >= ${f}::date) AND (${t}::date IS NULL OR metric_date <= ${t}::date)`;
+    const row = totals[0] ?? {} as never;
+
+    // new vs returning (proxy จากเคสหลังการขาย: ลูกค้าที่เคยมีเคสก่อนหน้า = returning)
+    const custSplit = await this.prisma.$queryRaw<{ new_c: bigint; returning_c: bigint }[]>`
+      WITH first_case AS (
+        SELECT customer_id, MIN(case_date) AS first_date
+        FROM service_cases WHERE customer_id IS NOT NULL GROUP BY customer_id
+      ),
+      in_range AS (
+        SELECT DISTINCT sc.customer_id
+        FROM service_cases sc
+        WHERE sc.customer_id IS NOT NULL
+          AND (${f}::date IS NULL OR sc.case_date >= ${f}::date)
+          AND (${t}::date IS NULL OR sc.case_date <= ${t}::date)
+      )
+      SELECT
+        COUNT(*) FILTER (WHERE fc.first_date >= ${f}::date OR ${f}::date IS NULL)::bigint AS new_c,
+        COUNT(*) FILTER (WHERE ${f}::date IS NOT NULL AND fc.first_date < ${f}::date)::bigint AS returning_c
+      FROM in_range ir JOIN first_case fc ON fc.customer_id = ir.customer_id`;
+    const cs = custSplit[0] ?? { new_c: 0n, returning_c: 0n };
+
+    return {
+      categories: {
+        order_payment: Number(row.order_payment ?? 0),
+        product_info: Number(row.product_info ?? 0),
+        order_status: Number(row.order_status ?? 0),
+        usage_problem: Number(row.usage_problem ?? 0),
+      },
+      presale: Number(row.presale ?? 0),
+      postsale: Number(row.postsale ?? 0),
+      newCustomers: Number(cs.new_c ?? 0),
+      returningCustomers: Number(cs.returning_c ?? 0),
+    };
+  }
+
   /** Top claimed products */
   async topProducts(r: DateRange, limit = 10) {
     const rows = await this.prisma.serviceCase.groupBy({
